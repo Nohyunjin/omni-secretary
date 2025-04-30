@@ -1,103 +1,98 @@
-import Image from "next/image";
+'use client';
+
+import ApiKeyModal from '@/components/ApiKeyModal';
+import ChatUI from '@/components/chat/ChatUI';
+import Image from 'next/image';
 
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="flex flex-col min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      {/* 헤더 */}
+      <header className="w-full p-4 flex items-center justify-between border-b">
+        <div className="flex items-center gap-2">
+          <Image
+            src="/logo.svg"
+            alt="Omni Secretary Logo"
+            width={36}
+            height={36}
+            className="dark:invert"
+          />
+          <h1 className="text-xl font-bold">Omni Secretary</h1>
+        </div>
+        <a
+          href="mailto:contact@omnisecretary.com"
+          className="px-4 py-1.5 text-sm rounded-full border border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 transition-colors"
+        >
+          Contact
+        </a>
+      </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      {/* 메인 콘텐츠 */}
+      <main className="flex-1 flex flex-col items-center justify-center p-6 max-w-4xl mx-auto">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+            개인 AI 비서로 이메일 관리를 간편하게
+          </h2>
+          <p className="text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto">
+            중요한 구독 메일을 정리하고, 숨겨진 가치를 발견하세요. 당신만의 비서가 메일함 속 정보를
+            효율적으로 관리해 드립니다.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+          <button
+            className="flex-1 px-6 py-3 rounded-lg bg-primary text-white hover:bg-primary-600 transition-colors focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+            onClick={() => {
+              // API 키 입력 모달 열기 로직
+              window.dispatchEvent(new CustomEvent('open-api-modal'));
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            시작하기
+          </button>
+          <button
+            className="flex-1 px-6 py-3 rounded-lg border border-slate-300 hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800 transition-colors"
+            onClick={() => {
+              // 체험 모드 시작 로직
+              window.dispatchEvent(new CustomEvent('start-demo'));
+            }}
           >
-            Read our docs
-          </a>
+            체험하기
+          </button>
+        </div>
+
+        <div className="mt-16 w-full max-w-3xl bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-6">
+            <h3 className="text-lg font-semibold mb-4">이런 작업을 도와드려요</h3>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <li className="flex items-start gap-2">
+                <span className="text-indigo-500 mt-0.5">✓</span>
+                <span>구독 메일 요약 및 분류</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-indigo-500 mt-0.5">✓</span>
+                <span>중요한 뉴스레터 하이라이트</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-indigo-500 mt-0.5">✓</span>
+                <span>메일 정리 및 자동화 제안</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-indigo-500 mt-0.5">✓</span>
+                <span>개인화된 응답 작성 도움</span>
+              </li>
+            </ul>
+          </div>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      {/* 푸터 */}
+      <footer className="w-full p-4 border-t text-center text-sm text-slate-500">
+        © 2025 Omni Secretary. All rights reserved.
       </footer>
+
+      {/* 모달 및 컴포넌트 */}
+      <ApiKeyModal />
+      <ChatUI />
     </div>
   );
 }
