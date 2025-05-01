@@ -1,2 +1,28 @@
+# 공통
+node_modules/
+out/
+.next/
+dist/
+.env
+.env.local
 .history
-.vscode
+
+# 프론트엔드
+./01.frontend/.next/
+./01.frontend/out/
+./01.frontend/node_modules/
+
+# 백엔드
+__pycache__/
+02.backend/__pycache__/
+02.backend/env/
+02.backend/Scripts/
+02.backend/Lib/
+02.backend/pyvenv.cfg
+02.backend/env/
+02.backend/.venv/
+02.backend/.pytest_cache/
+02.backend/node_modules/
+
+# IDE
+.vscode/
