@@ -1,28 +1,28 @@
-from app.api.v1.endpoints import agent
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.endpoints import agent
 
-def create_app() -> FastAPI:
-    app = FastAPI(
-        title="OmniSecretary API",
-        description="Backend API server for OmniSecretary project.",
-        version="1.0.0",
-    )
+app = FastAPI(
+    title="Omni Secretary API", description="개인 비서 AI API", version="0.1.0"
+)
 
-    # CORS 설정
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# CORS 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 프로덕션 환경에서는 명확한 오리진 지정
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    # API 라우터 등록
-    app.include_router(agent.router, prefix="/api/v1/agent", tags=["Agent"])
-
-    return app
+# API 라우터 등록
+app.include_router(agent.router, prefix="/api/v1/agent", tags=["agent"])
 
 
-app = create_app()
+@app.get("/")
+async def root():
+    """
+    루트 엔드포인트 - API 상태 확인
+    """
+    return {"status": "online", "message": "Omni Secretary API is running"}

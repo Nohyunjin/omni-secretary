@@ -1,16 +1,26 @@
-from pydantic import BaseSettings
+import os
+from typing import Optional
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "OmniSecretary"
-    API_V1_PREFIX: str = "/api/v1"
-    MCP_SERVER_URL: str = "http://localhost:8001"
+    """애플리케이션 설정"""
 
-    # CORS 설정
-    ALLOWED_ORIGINS: list[str] = ["*"]
+    # API 설정
+    API_HOST: str = Field(default="0.0.0.0")
+    API_PORT: int = Field(default=8000)
 
-    class Config:
-        env_file = ".env"
+    # 기본 LLM 모델 설정
+    DEFAULT_MODEL: str = Field(default="gpt-4")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
 
 
+# 설정 객체 인스턴스화
 settings = Settings()
