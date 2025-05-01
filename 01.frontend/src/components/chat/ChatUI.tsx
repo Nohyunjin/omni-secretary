@@ -35,13 +35,15 @@ export default function ChatUI() {
   const [isActive, setIsActive] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [apiKey, setApiKey] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // API 키 성공 이벤트를 감지하여 채팅 UI 활성화
   useEffect(() => {
-    const handleApiSuccess = () => {
+    const handleApiSuccess = (event: CustomEvent) => {
       setIsActive(true);
+      setApiKey(event.detail?.apiKey || '');
     };
 
     // 체험 모드 이벤트도 감지
@@ -49,11 +51,17 @@ export default function ChatUI() {
       setIsActive(true);
     };
 
-    window.addEventListener('api-key-success', handleApiSuccess);
+    // 로컬 스토리지에서 API 키 복원
+    const savedKey = localStorage.getItem('api_key');
+    if (savedKey) {
+      setApiKey(savedKey);
+    }
+
+    window.addEventListener('api-key-success', handleApiSuccess as EventListener);
     window.addEventListener('start-demo', handleDemoStart);
 
     return () => {
-      window.removeEventListener('api-key-success', handleApiSuccess);
+      window.removeEventListener('api-key-success', handleApiSuccess as EventListener);
       window.removeEventListener('start-demo', handleDemoStart);
     };
   }, []);
@@ -76,6 +84,13 @@ export default function ChatUI() {
   const handleSendMessage = async () => {
     if (!input.trim() || isProcessing) return;
 
+    // API 키 확인
+    if (!apiKey) {
+      // API 키 모달 열기
+      window.dispatchEvent(new Event('open-api-modal'));
+      return;
+    }
+
     // 사용자 메시지 추가
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -94,18 +109,83 @@ export default function ChatUI() {
     }
 
     try {
-      // 여기서 실제 AI 응답을 처리할 예정
-      // 지금은 간단한 에코로 구현
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // AI 응답 요청
+      const response = await fetch('/api/agent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: input.trim(),
+          api_key: apiKey,
+          stream: true,
+        }),
+      });
 
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `메일 분석 중... "${input.trim()}"에 대한 결과를 보여드릴게요.`,
-        timestamp: new Date(),
-      };
+      if (!response.ok) {
+        throw new Error('API 응답 오류');
+      }
 
-      setMessages((prev) => [...prev, aiResponse]);
+      // 스트리밍 응답 처리
+      if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: '',
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, aiResponse]);
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('응답 본문을 읽을 수 없습니다.');
+
+        // 메시지 ID 저장
+        const aiMessageId = aiResponse.id;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // 디코딩 및 파싱
+          const text = new TextDecoder().decode(value);
+          const lines = text.split('\n');
+
+          let content = '';
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              try {
+                const data = JSON.parse(line.substring(5));
+                if (data.content) {
+                  content += data.content;
+                }
+              } catch (e) {
+                // 파싱 오류 무시
+              }
+            }
+          }
+
+          if (content) {
+            // 기존 메시지 업데이트
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessageId ? { ...msg, content: msg.content + content } : msg
+              )
+            );
+          }
+        }
+      } else {
+        // 일반 JSON 응답 처리
+        const data = await response.json();
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.content || '응답을 받지 못했습니다.',
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, aiResponse]);
+      }
     } catch (error) {
       // 오류 처리
       const errorMessage: Message = {
