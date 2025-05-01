@@ -692,4 +692,5 @@ function ItemEditModal({ open, items, recommendedItems, onConfirm, onClose }) {
 
 // The intermediate ItemEditBody component is eliminated, reducing coupling.
 
+
 ```
