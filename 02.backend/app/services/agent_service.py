@@ -33,6 +33,7 @@ class AgentService:
         user_input: str,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        message_history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """OpenAI API를 사용하여 사용자 입력 처리"""
         if not api_key:
@@ -94,18 +95,29 @@ class AgentService:
 
             logger.info(f"사용 가능한 도구: {len(available_tools)}개")
 
+            # 메시지 배열 초기화
+            system_message = {
+                "role": "system",
+                "content": "당신은 유용한 비서 역할을 하는 AI입니다. 사용자의 질문에 최대한 도움이 되도록 답변해주세요.",
+            }
+
+            # 기본 메시지 배열 구성
+            messages = [system_message]
+
+            # 이전 메시지 기록이 있으면 추가
+            if message_history and len(message_history) > 0:
+                logger.info(f"이전 메시지 기록 {len(message_history)}개 추가")
+                messages.extend(message_history)
+
+            # 현재 사용자 쿼리 추가
+            messages.append({"role": "user", "content": user_input})
+
             # 도구가 없으면 일반 응답만 생성
             if not available_tools:
                 # 일반 응답 생성
                 response = await openai_client.chat.completions.create(
                     model=model_name,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "당신은 유용한 비서 역할을 하는 AI입니다. 사용자의 질문에 최대한 도움이 되도록 답변해주세요.",
-                        },
-                        {"role": "user", "content": user_input},
-                    ],
+                    messages=messages,
                     max_tokens=1000,
                 )
                 answer = (
@@ -114,16 +126,16 @@ class AgentService:
                 logger.info(f"일반 응답: {answer[:100]}...")
                 return answer
 
+            # 도구를 사용하는 경우, 시스템 프롬프트 수정
+            messages[0] = {
+                "role": "system",
+                "content": "당신은 유용한 비서 역할을 하는 AI입니다. 필요한 경우 적절한 도구를 사용해서 사용자를 도와주세요.",
+            }
+
             # 초기 OpenAI API 호출
             response = await openai_client.chat.completions.create(
                 model=model_name,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "당신은 유용한 비서 역할을 하는 AI입니다. 필요한 경우 적절한 도구를 사용해서 사용자를 도와주세요.",
-                    },
-                    {"role": "user", "content": user_input},
-                ],
+                messages=messages,
                 tools=available_tools,
                 tool_choice="auto",
                 max_tokens=1000,
@@ -132,14 +144,8 @@ class AgentService:
             # 도구 호출이 있는지 확인
             assistant_message = response.choices[0].message
             if assistant_message.tool_calls:
-                # 메시지 배열 구성 - 시스템, 사용자 질문, 어시스턴트 응답
-                messages = [
-                    {
-                        "role": "system",
-                        "content": "당신은 유용한 비서 역할을 하는 AI입니다. 필요한 경우 적절한 도구를 사용해서 사용자를 도와주세요.",
-                    },
-                    {"role": "user", "content": user_input},
-                ]
+                # 메시지 배열 재구성 (이미 이전 대화 내용 포함)
+                tool_messages = messages.copy()
 
                 # 어시스턴트 메시지를 원본 그대로 (tool_calls 포함) 추가
                 assistant_dict = {
@@ -161,7 +167,7 @@ class AgentService:
                         for tool_call in assistant_message.tool_calls
                     ]
 
-                messages.append(assistant_dict)
+                tool_messages.append(assistant_dict)
 
                 # 각 도구 호출에 대해 처리
                 for tool_call in assistant_message.tool_calls:
@@ -208,7 +214,7 @@ class AgentService:
                             result = f"사용할 수 없는 도구: {function_name}"
 
                     # 결과를 OpenAI에 다시 전달
-                    messages.append(
+                    tool_messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": tool_call.id,
@@ -218,9 +224,9 @@ class AgentService:
                     )
 
                 # 도구 결과를 바탕으로 최종 응답 생성
-                logger.info(f"최종 응답을 위한 메시지: {len(messages)}개")
+                logger.info(f"최종 응답을 위한 메시지: {len(tool_messages)}개")
                 final_response = await openai_client.chat.completions.create(
-                    model=model_name, messages=messages, max_tokens=1000
+                    model=model_name, messages=tool_messages, max_tokens=1000
                 )
 
                 final_answer = (
@@ -246,7 +252,10 @@ agent_service = AgentService()
 
 
 async def process_user_input(
-    user_input: str, api_key: Optional[str] = None, model: Optional[str] = None
+    user_input: str,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    message_history: Optional[List[Dict[str, str]]] = None,
 ) -> str:
     """
     사용자 입력을 받아 처리하는 함수
@@ -255,11 +264,12 @@ async def process_user_input(
         user_input: 사용자 질문 또는 요청
         api_key: OpenAI API 키 (옵션)
         model: 사용할 모델 이름 (옵션)
+        message_history: 이전 메시지 기록 (멀티턴 대화를 위해 사용)
     """
     try:
         # OpenAI로 처리
         response_text = await agent_service.process_with_openai(
-            user_input, api_key, model
+            user_input, api_key, model, message_history
         )
         return response_text
     except Exception as e:

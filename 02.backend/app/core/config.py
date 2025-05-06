@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     API_PORT: int = Field(default=8000)
 
     # 기본 LLM 모델 설정
-    DEFAULT_MODEL: str = Field(default="gpt-4")
+    DEFAULT_MODEL: str = Field(default="gpt-4o-mini")
 
     # 설정 디렉토리
     CONFIG_DIR: str = Field(
