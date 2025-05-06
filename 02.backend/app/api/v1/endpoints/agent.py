@@ -227,20 +227,18 @@ async def generate_openai_stream_with_mcp(
             if not response.choices[0].message.tool_calls:
                 # 최종 응답 내용 스트리밍
                 assistant_message = response.choices[0].message.content or ""
-
-                # 첫 번째 반복이 아닌 경우에만 구분선 표시
-                if iteration > 0:
-                    yield f"data: {json.dumps({'content': '최종 응답:'}, ensure_ascii=False)}"
+                logger.info(f"최종 응답 생성: {assistant_message[:100]}...")
 
                 # 응답을 작은 청크로 나눠서 스트리밍
                 chunk_size = 20
                 for i in range(0, len(assistant_message), chunk_size):
                     chunk = assistant_message[i : i + chunk_size]
                     event_data = json.dumps({"content": chunk}, ensure_ascii=False)
-                    yield f"data: {event_data}"
+                    yield f"data: {event_data}\n\n"  # SSE 형식에 맞게 개행 추가
                     await asyncio.sleep(0.01)  # 스트리밍 효과를 위한 작은 지연
 
-                yield f"data: {json.dumps({'content': '', 'finish_reason': 'stop'}, ensure_ascii=False)}"
+                # 스트림 종료 이벤트 전송
+                yield f"data: {json.dumps({'content': '', 'finish_reason': 'stop'}, ensure_ascii=False)}\n\n"
                 return
 
             # 도구 호출이 있는 경우 처리
@@ -268,9 +266,13 @@ async def generate_openai_stream_with_mcp(
 
             # 첫 반복이거나 이전 반복에서도 도구를 사용한 경우의 메시지 표시
             if iteration == 0:
-                yield f"data: {json.dumps({'content': '🔍 요청을 처리하기 위해 도구를 사용합니다...'}, ensure_ascii=False)}"
+                # yield f"data: {json.dumps({'content': '🔍 요청을 처리하기 위해 도구를 사용합니다...'}, ensure_ascii=False)}"
+                logger.info("🔍 요청을 처리하기 위해 도구를 사용합니다...")
             else:
-                yield f"data: {json.dumps({'content': f'🔄 추가 정보가 필요하여 도구를 다시 사용합니다({iteration+1}/{max_iterations})...'}, ensure_ascii=False)}"
+                # yield f"data: {json.dumps({'content': f'🔄 추가 정보가 필요하여 도구를 다시 사용합니다({iteration+1}/{max_iterations})...'}, ensure_ascii=False)}"
+                logger.info(
+                    f"🔄 추가 정보가 필요하여 도구를 다시 사용합니다({iteration+1}/{max_iterations})..."
+                )
 
             # 각 도구 호출에 대해 처리
             for tool_call in assistant_message.tool_calls:
@@ -284,8 +286,8 @@ async def generate_openai_stream_with_mcp(
                     args_dict = {}
 
                 # 사용자에게 도구 호출 정보 표시
-                yield f"data: {json.dumps({'content': f'🧰 도구 사용: {function_name}'}, ensure_ascii=False)}"
-                logger.info(f"도구 {function_name} 호출 (인자: {args_dict})")
+                # yield f"data: {json.dumps({'content': f'🧰 도구 사용: {function_name}'}, ensure_ascii=False)}"
+                logger.info(f"🧰 도구 사용: {function_name} (인자: {args_dict})")
 
                 # 도구 실행
                 result = None
@@ -307,60 +309,91 @@ async def generate_openai_stream_with_mcp(
                                 logger.warning(
                                     f"도구 '{function_name}' 실행 실패: {result}"
                                 )
-                                yield f"data: {json.dumps({'content': f'⚠️ 도구 실행 실패: {result}'}, ensure_ascii=False)}"
+                                # yield f"data: {json.dumps({'content': f'⚠️ 도구 실행 실패: {result}'}, ensure_ascii=False)}"
                         except Exception as e:
                             logger.error(f"도구 '{function_name}' 실행 오류: {str(e)}")
                             result = f"도구 실행 오류: {str(e)}"
-                            yield f"data: {json.dumps({'content': f'⚠️ 도구 실행 오류: {str(e)}'}, ensure_ascii=False)}"
+                            # yield f"data: {json.dumps({'content': f'⚠️ 도구 실행 오류: {str(e)}'}, ensure_ascii=False)}"
                     else:
                         result = f"사용할 수 없는 도구: {function_name}"
-                        yield f"data: {json.dumps({'content': f'⚠️ 사용할 수 없는 도구: {function_name}'}, ensure_ascii=False)}"
+                        # yield f"data: {json.dumps({'content': f'⚠️ 사용할 수 없는 도구: {function_name}'}, ensure_ascii=False)}"
 
                 # 결과를 메시지에 추가
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": function_name,
-                        "content": str(result),
-                    }
-                )  # type: ignore
+                # 실제 도구 결과는 내부적으로만 사용하고, 클라이언트로는 요약된 정보만 전송
 
-                # 도구 실행 결과 요약을 사용자에게 표시 (너무 길면 축약)
+                # 이메일 결과 정리 (search_emails 도구인 경우)
+                if function_name == "search_emails":
+                    # 이메일 조회 결과를 간결하게 변환
+                    content_for_model = str(result)  # 모델에게는 전체 결과 제공
+
+                    # 하지만 messages에는 전체 데이터 추가
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": content_for_model,
+                        }
+                    )  # type: ignore
+                else:
+                    # 다른 도구는 일반적으로 처리
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": str(result),
+                        }
+                    )  # type: ignore
+
+                # 도구 실행 결과 요약을 서버 로그에만 기록 (클라이언트로 전송 안함)
                 result_str = str(result)
                 if len(result_str) > 100:
                     short_result = result_str[:100] + "... (결과 축약됨)"
-                    yield f"data: {json.dumps({'content': f'📋 결과: {short_result}'}, ensure_ascii=False)}"
+                    logger.info(f"📋 결과: {short_result}")
                 else:
-                    yield f"data: {json.dumps({'content': f'📋 결과: {result_str}'}, ensure_ascii=False)}"
+                    logger.info(f"📋 결과: {result_str}")
 
             # 다음 반복으로
             iteration += 1
 
         # 최대 반복 횟수 도달 시
         if iteration >= max_iterations:
-            yield f"data: {json.dumps({'content': f'⚠️ 최대 도구 호출 횟수({max_iterations}회)에 도달했습니다. 최종 응답을 생성합니다.'}, ensure_ascii=False)}"
+            # yield f"data: {json.dumps({'content': f'⚠️ 최대 도구 호출 횟수({max_iterations}회)에 도달했습니다. 최종 응답을 생성합니다.'}, ensure_ascii=False)}"
+            logger.warning(
+                f"⚠️ 최대 도구 호출 횟수({max_iterations}회)에 도달했습니다. 최종 응답을 생성합니다."
+            )
 
             # 최종 응답 생성
             final_response = await client.chat.completions.create(
                 model=model_name,
                 messages=messages,  # type: ignore
-                max_tokens=1000,
+                max_tokens=8192,
             )
 
             final_answer = (
                 final_response.choices[0].message.content
                 or "응답을 생성할 수 없습니다."
             )
-            yield f"data: {json.dumps({'content': f'{final_answer}'}, ensure_ascii=False)}"
-            yield f"data: {json.dumps({'content': '', 'finish_reason': 'stop'}, ensure_ascii=False)}"
+            logger.info(f"최종 응답 생성: {final_answer[:100]}...")
+
+            # 응답을 청크로 나눠서 스트리밍
+            chunk_size = 20
+            for i in range(0, len(final_answer), chunk_size):
+                chunk = final_answer[i : i + chunk_size]
+                event_data = json.dumps({"content": chunk}, ensure_ascii=False)
+                yield f"data: {event_data}\n\n"  # SSE 형식에 맞게 개행 추가
+                await asyncio.sleep(0.01)
+
+            # 스트림 종료 이벤트 전송
+            yield f"data: {json.dumps({'content': '', 'finish_reason': 'stop'}, ensure_ascii=False)}\n\n"
 
     except Exception as e:
         error_msg = str(e)
         if api_key and api_key in error_msg:
             error_msg = error_msg.replace(api_key, "[API_KEY]")
         logger.error(f"스트리밍 MCP 응답 생성 오류: {error_msg}")
-        yield f"data: {json.dumps({'error': error_msg}, ensure_ascii=False)}"
+        yield f"data: {json.dumps({'error': error_msg}, ensure_ascii=False)}\n\n"
 
 
 @router.post("/query")
