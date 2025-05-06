@@ -16,7 +16,8 @@ const initialMessages: Message[] = [
   {
     id: 'welcome',
     role: 'assistant',
-    content: '안녕하세요! Omni Secretary입니다. 이메일 관리와 관련하여 어떤 도움이 필요하신가요?',
+    content:
+      '새로운 이메일이 있는지 확인해 드릴까요? Gmail에서 최근 메일을 확인하고 요약해 드리겠습니다.',
     timestamp: new Date(),
   },
 ];
@@ -31,6 +32,8 @@ const suggestedPrompts = [
 
 // 세션 스토리지 키
 const STORAGE_KEY = 'omni_secretary_messages';
+// 메일 확인 상태 저장 키
+const MAIL_CHECK_KEY = 'omni_secretary_mail_check';
 
 export default function ChatUI() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -39,6 +42,7 @@ export default function ChatUI() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [apiKey, setApiKey] = useState<string>('');
+  const [hasCheckedMail, setHasCheckedMail] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -76,6 +80,10 @@ export default function ChatUI() {
       }
     }
 
+    // 세션 스토리지에서 메일 확인 상태 복원
+    const mailChecked = sessionStorage.getItem(MAIL_CHECK_KEY);
+    setHasCheckedMail(mailChecked === 'true');
+
     window.addEventListener('api-key-success', handleApiSuccess as EventListener);
     window.addEventListener('start-demo', handleDemoStart);
 
@@ -84,6 +92,35 @@ export default function ChatUI() {
       window.removeEventListener('start-demo', handleDemoStart);
     };
   }, []);
+
+  // 활성화 상태 변경 시 메일 확인 제안
+  useEffect(() => {
+    // 채팅이 활성화되고, API 키가 있고, 아직 메일을 확인하지 않은 경우에만 제안
+    // 초기 메시지와 다른 경우와 사용자가 메시지를 한 번 이상 보낸 경우에만 제안
+    if (
+      isActive &&
+      apiKey &&
+      !hasCheckedMail &&
+      messages.length > initialMessages.length &&
+      messages.some((msg) => msg.role === 'user')
+    ) {
+      // 짧은 지연 후 메일 확인 제안 메시지 표시
+      const timer = setTimeout(() => {
+        const mailCheckMessage: Message = {
+          id: 'mail-check-prompt',
+          role: 'assistant',
+          content:
+            '새로운 이메일이 있는지 확인해 드릴까요? Gmail에서 최근 메일을 확인하고 요약해 드리겠습니다.',
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, mailCheckMessage]);
+        setHasCheckedMail(true);
+        sessionStorage.setItem(MAIL_CHECK_KEY, 'true');
+      }, 1000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isActive, apiKey, hasCheckedMail, messages.length]);
 
   // 메시지가 추가될 때마다 스크롤 맨 아래로 이동 및 세션 스토리지에 저장
   useEffect(() => {
@@ -108,6 +145,9 @@ export default function ChatUI() {
   const resetConversation = () => {
     setMessages(initialMessages);
     sessionStorage.removeItem(STORAGE_KEY);
+    // 메일 확인 상태도 초기화
+    setHasCheckedMail(false);
+    sessionStorage.removeItem(MAIL_CHECK_KEY);
   };
 
   // 메시지 전송 처리
@@ -138,6 +178,12 @@ export default function ChatUI() {
       inputRef.current.style.height = 'auto';
     }
 
+    // 메일 확인 요청인지 검사 (최근 메시지가 메일 확인 제안이고 사용자 응답이 '예'인 경우)
+    const isMailCheckResponse =
+      messages.length > 0 &&
+      messages[messages.length - 1].id === 'mail-check-prompt' &&
+      ['예', '네', 'yes', 'y', '응'].includes(input.trim().toLowerCase());
+
     try {
       // 이전 메시지 컨텍스트 준비 (첫 웰컴 메시지 제외)
       const messageHistory =
@@ -148,6 +194,11 @@ export default function ChatUI() {
             }))
           : [];
 
+      // 메일 확인 요청인 경우 추가 지시사항 포함
+      const userText = isMailCheckResponse
+        ? '최근 받은 중요한 이메일을 Gmail에서 검색하여 카테고리별로 분류하고 각각 간단히 요약해주세요. 카테고리는 업무, 개인, 뉴스레터, 바우처/프로모션, 채용 관련 등으로 나눠주세요. 다 읽고 난 후 사용자에게 어떤 카테고리의 메일을 더 자세히 보고 싶은지 물어봐 주세요.'
+        : input.trim();
+
       // AI 응답 요청
       const response = await fetch('/api/agent', {
         method: 'POST',
@@ -155,7 +206,7 @@ export default function ChatUI() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: input.trim(),
+          text: userText,
           api_key: apiKey,
           stream: true,
           messageHistory, // 이전 메시지 컨텍스트 추가
