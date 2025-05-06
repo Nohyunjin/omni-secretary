@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { text, api_key, stream = true } = body;
+    const { text, api_key, stream = true, messageHistory = [] } = body;
 
     if (!text) {
       return NextResponse.json({ error: '텍스트가 제공되지 않았습니다.' }, { status: 400 });
@@ -14,7 +14,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'API 키가 제공되지 않았습니다.' }, { status: 400 });
     }
 
-    const apiUrl = getApiUrl(API_PATHS.agent);
+    // 스트리밍 응답을 위한 엔드포인트 선택
+    const endpointPath = stream ? API_PATHS.agent_stream : API_PATHS.agent;
+    const apiUrl = getApiUrl(endpointPath);
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -25,6 +28,7 @@ export async function POST(request: Request) {
         text,
         api_key,
         stream,
+        messageHistory,
       }),
     });
 
