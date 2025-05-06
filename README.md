@@ -1,53 +1,109 @@
 # Omni Secretary
 
-**OmniSecretary**는 하나의 지능형 개인 비서가 다양한 작업(이메일 정리, 교통 경로 추천, 일정 관리 등)을 능동적으로 수행할 수 있도록 설계된 에이전트 기반 플랫폼입니다.
+개인 비서 AI 시스템입니다. Gmail, 캘린더 등 다양한 서비스와 연동하여 작업을 자동화합니다.
 
-## 주요 기능
+## 시스템 구성
 
-- **이메일 정리**: 구독 메일 요약 및 분류
-- **교통 비서**: 한국 내 최적의 출발 시간 및 경로 추천 (추가 예정)
-- **일정 관리 비서**: 예정된 일정 등록 및 알림 기능 (추가 예정)
+- **프론트엔드**: React 기반 웹 애플리케이션 (01.frontend)
+- **백엔드**: FastAPI 기반 백엔드 서버 (02.backend)
+- **MCP 서버**: Model-Control-Panel 서버, 외부 서비스와의 연동 담당 (03.mcp-server)
 
-## 아키텍처
+## 설치 방법
 
-- **프론트엔드**: Next.js 15 (React 19), TypeScript, TailwindCSS
-- **백엔드**: FastAPI (Python)
-- **MCP 서버**: 이메일 처리 및 AI 도구 관리
-- **AI 통합**: OpenAI API 연동
-
-## 레포지토리 구성
-
-- `/01.frontend` - 사용자 인터페이스 (OpenAI API 키 입력, 채팅 UI)
-- `/02.backend` - 핵심 API 서버 (OpenAI 통신, MCP 연동)
-- `/03.mcp-server` - Gmail MCP 서버 (이메일 데이터 처리)
-- `/00.docs` - 프로젝트 문서 및 개발 명세서
-
-## 개발 로드맵
-
-- [x] 프론트엔드 개발 - API 키 입력 모달 + Chat UI (4/29)
-- [ ] 백엔드 개발 - OpenAI + MCP 연동 ~~(4/30)~~ - 지연 (5/2)
-- [ ] Gmail MCP 개발 ~~(5/1)~~ - 지연 (5/3)
-- [ ] 서비스 통합 및 테스트 ~~(5/2)~~ - 지연 (5/4)
-
-## 시작하기
-
-### 프론트엔드 실행
+### 1. 프론트엔드
 
 ```bash
 cd 01.frontend
-pnpm install
-pnpm run dev
+npm install
 ```
 
-### 백엔드 실행
+### 2. 백엔드
 
 ```bash
 cd 02.backend
-uv venv
-uv pip install -r requirements.txt
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 3. MCP 서버
+
+```bash
+cd 03.mcp-server/gmail-mcp
+npm install
+```
+
+## 실행 방법
+
+모든 서비스를 한 번에 실행하려면:
+
+### Windows:
+
+```
+run-all.bat
+```
+
+### Linux/Mac:
+
+```
+./run-all.sh
+```
+
+### 개별 실행:
+
+1. **프론트엔드**:
+
+```bash
+cd 01.frontend
+npm start
+```
+
+2. **백엔드**:
+
+```bash
+cd 02.backend
 python run.py
 ```
+
+3. **Gmail MCP 서버**:
+
+```bash
+cd 03.mcp-server/gmail-mcp
+npm run start:http
+```
+
+## Gmail 인증 설정
+
+Gmail API를 사용하기 위해서는 OAuth2 인증이 필요합니다:
+
+1. 백엔드와 MCP 서버가 실행 중인지 확인합니다.
+2. 다음 URL에 접속하여 인증 프로세스를 시작합니다:
+
+```
+http://localhost:8000/gmail/start-auth
+```
+
+3. 반환된 URL을 브라우저에서 열고 Google 계정으로 로그인합니다.
+4. 인증이 완료되면 자동으로 콜백 URL로 리디렉션됩니다.
+
+## API 엔드포인트
+
+### 백엔드 API
+
+- **상태 확인**: `GET http://localhost:8000/`
+- **에이전트 실행**: `POST http://localhost:8000/api/v1/agent/run`
+- **Gmail 인증 시작**: `GET http://localhost:8000/gmail/start-auth`
+- **Gmail 인증 상태 확인**: `GET http://localhost:8000/gmail/auth-status`
+
+### MCP 서버 API
+
+- **상태 확인**: `GET http://localhost:3200/status`
+- **도구 목록**: `GET http://localhost:3200/tools`
+- **도구 실행**: `POST http://localhost:3200/execute`
+
+## 문제 해결
+
+- **포트 충돌**: 다른 애플리케이션이 사용 중인 포트가 있는 경우, 설정 파일에서 포트 번호를 변경하세요.
+- **인증 오류**: OAuth 인증 중 오류가 발생하면 로그를 확인하고 인증 과정을 다시 시도하세요.
+- **연결 오류**: MCP 서버와 백엔드 간의 연결이 실패하면 양쪽 서버가 모두 실행 중인지 확인하세요.
 
 ## 라이선스
 
