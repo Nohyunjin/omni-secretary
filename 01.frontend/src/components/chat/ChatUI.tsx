@@ -29,6 +29,9 @@ const suggestedPrompts = [
   '스팸 메일을 찾아줘',
 ];
 
+// 세션 스토리지 키
+const STORAGE_KEY = 'omni_secretary_messages';
+
 export default function ChatUI() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState('');
@@ -39,7 +42,7 @@ export default function ChatUI() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // API 키 성공 이벤트를 감지하여 채팅 UI 활성화
+  // API 키 성공 이벤트를 감지하여 채팅 UI 활성화 및 세션 스토리지에서 메시지 복원
   useEffect(() => {
     const handleApiSuccess = (event: CustomEvent) => {
       setIsActive(true);
@@ -57,6 +60,22 @@ export default function ChatUI() {
       setApiKey(savedKey);
     }
 
+    // 세션 스토리지에서 메시지 기록 복원
+    const savedMessages = sessionStorage.getItem(STORAGE_KEY);
+    if (savedMessages) {
+      try {
+        const parsedMessages = JSON.parse(savedMessages);
+        // 타임스탬프를 Date 객체로 변환
+        const messagesWithDates = parsedMessages.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+        setMessages(messagesWithDates);
+      } catch (e) {
+        console.error('저장된 메시지를 불러오는데 실패했습니다.', e);
+      }
+    }
+
     window.addEventListener('api-key-success', handleApiSuccess as EventListener);
     window.addEventListener('start-demo', handleDemoStart);
 
@@ -66,9 +85,14 @@ export default function ChatUI() {
     };
   }, []);
 
-  // 메시지가 추가될 때마다 스크롤 맨 아래로 이동
+  // 메시지가 추가될 때마다 스크롤 맨 아래로 이동 및 세션 스토리지에 저장
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+    // 초기 메시지가 아닌 경우에만 세션 스토리지에 저장
+    if (messages.length > initialMessages.length || messages[0].id !== initialMessages[0].id) {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    }
   }, [messages]);
 
   // 텍스트 영역 높이 자동 조정
@@ -78,6 +102,12 @@ export default function ChatUI() {
       textarea.style.height = 'auto';
       textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
     }
+  };
+
+  // 대화 기록 초기화
+  const resetConversation = () => {
+    setMessages(initialMessages);
+    sessionStorage.removeItem(STORAGE_KEY);
   };
 
   // 메시지 전송 처리
@@ -109,6 +139,15 @@ export default function ChatUI() {
     }
 
     try {
+      // 이전 메시지 컨텍스트 준비 (첫 웰컴 메시지 제외)
+      const messageHistory =
+        messages.length > 1
+          ? messages.slice(1).map((msg) => ({
+              role: msg.role,
+              content: msg.content,
+            }))
+          : [];
+
       // AI 응답 요청
       const response = await fetch('/api/agent', {
         method: 'POST',
@@ -119,6 +158,7 @@ export default function ChatUI() {
           text: input.trim(),
           api_key: apiKey,
           stream: true,
+          messageHistory, // 이전 메시지 컨텍스트 추가
         }),
       });
 
@@ -231,6 +271,27 @@ export default function ChatUI() {
       <header className="border-b p-3 flex items-center bg-primary text-white shrink-0">
         <h1 className="text-lg font-bold">Omni Secretary</h1>
         <div className="ml-auto flex items-center gap-1">
+          <button
+            className="p-1.5 rounded-md hover:bg-primary-600 transition-colors"
+            onClick={resetConversation}
+            aria-label="대화 초기화"
+            title="대화 초기화"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+              <path d="M3 3v5h5"></path>
+            </svg>
+          </button>
           {isExpanded ? (
             <button
               className="p-1.5 rounded-md hover:bg-primary-600 transition-colors"

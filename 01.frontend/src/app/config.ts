@@ -4,6 +4,7 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://loca
 // API 경로
 export const API_PATHS = {
   agent: '/api/v1/agent/query',
+  agent_stream: '/api/v1/agent/stream',
 };
 
 // 전체 API URL 반환
