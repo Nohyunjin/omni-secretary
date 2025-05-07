@@ -1,6 +1,30 @@
 import { API_PATHS, getApiUrl } from '@/app/config';
 import { NextResponse } from 'next/server';
 
+// 시스템 프롬프트 생성 함수
+const getSystemPrompt = () => {
+  // 오늘 날짜를 YYYY/MM/DD 형식으로 생성
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const formattedDate = `${year}/${month}/${day}`;
+
+  const koreanDate = today.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  return `당신은 Omni Secretary라는 이메일 비서입니다.
+현재 날짜는 ${koreanDate} (${formattedDate})입니다.
+사용자가 오늘 받은 메일이나 최근 메일에 대해 물어보면 "after:${formattedDate}" 검색 쿼리를 활용해 적절히 응답해주세요.
+
+마크다운 형식을 사용하지 말고 일반 텍스트로 응답하세요.
+숫자는 강조 표시(**) 없이 그냥 숫자만 사용하세요.
+응답은 간결하게 작성하세요.`;
+};
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -18,12 +42,18 @@ export async function POST(request: Request) {
     const endpointPath = stream ? API_PATHS.agent_stream : API_PATHS.agent;
     const apiUrl = getApiUrl(endpointPath);
 
+    // 서버 측에서 생성한 시스템 프롬프트 사용
+    const serverSystemPrompt = getSystemPrompt();
+
+    // 클라이언트에서 전달된 프롬프트가 있으면 사용, 없으면 서버에서 생성한 프롬프트 사용
+    const finalSystemPrompt = systemPrompt || serverSystemPrompt;
+
     // 시스템 프롬프트가 있으면 메시지 기록 앞에 추가
     const fullMessageHistory = [...messageHistory];
-    if (systemPrompt) {
+    if (finalSystemPrompt) {
       fullMessageHistory.unshift({
         role: 'system',
-        content: systemPrompt,
+        content: finalSystemPrompt,
       });
     }
 
