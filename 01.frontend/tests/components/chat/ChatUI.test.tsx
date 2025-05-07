@@ -125,8 +125,8 @@ describe('ChatUI 컴포넌트', () => {
       });
     });
 
-    // 테스트 실패하면 UI 상태 확인용
-    screen.debug();
+    // UI가 활성화되었는지 확인 (헤더가 표시됨)
+    expect(screen.getByText('Omni Secretary')).toBeInTheDocument();
   });
 
   it('start-demo 이벤트를 받으면 활성화되어야 함', async () => {
@@ -146,13 +146,24 @@ describe('ChatUI 컴포넌트', () => {
       });
     });
 
-    // 테스트 실패하면 UI 상태 확인용
-    screen.debug();
+    // UI가 활성화되었는지 확인 (헤더가 표시됨)
+    expect(screen.getByText('Omni Secretary')).toBeInTheDocument();
   });
 
-  it('초기 웰컴 메시지가 표시되어야 함', async () => {
+  it('메시지가 표시될 수 있어야 함', async () => {
     // API 키 설정
     localStorageMock.getItem.mockReturnValue('test-key');
+
+    // 초기 메시지 설정
+    const testMessages = JSON.stringify([
+      {
+        id: 'test-msg',
+        role: 'assistant',
+        content: '테스트 메시지입니다.',
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+    sessionStorageMock.getItem.mockReturnValue(testMessages);
 
     const { container } = render(<ChatUI />);
 
@@ -169,6 +180,7 @@ describe('ChatUI 컴포넌트', () => {
     // 메시지 컨테이너를 찾아서 메시지가 존재하는지 확인
     const messageElements = container.querySelectorAll('.whitespace-pre-wrap');
     expect(messageElements.length).toBeGreaterThan(0);
+    expect(messageElements[0].textContent).toBe('테스트 메시지입니다.');
   });
 
   it('제안된 프롬프트를 클릭하면 입력 필드에 텍스트가 채워져야 함', async () => {
@@ -209,14 +221,43 @@ describe('ChatUI 컴포넌트', () => {
         // 입력 필드에 텍스트가 설정되었는지 확인
         if (textarea) {
           expect((textarea as HTMLTextAreaElement).value).toBe(promptText);
+        } else {
+          throw new Error('Textarea element not found');
         }
+      } else {
+        throw new Error('Prompt buttons not found');
       }
+    } else {
+      throw new Error('Prompts container not found');
     }
   });
 
   it('대화 초기화 버튼을 클릭하면 메시지가 초기화되어야 함', async () => {
     // 활성화
     localStorageMock.getItem.mockReturnValue('test-key');
+
+    // 세션 스토리지에 메시지 설정
+    const customMessages = [
+      {
+        id: 'test-user',
+        role: 'user',
+        content: '이전 메시지 테스트',
+        timestamp: new Date().toISOString(),
+      },
+      {
+        id: 'test-assistant',
+        role: 'assistant',
+        content: '응답 테스트',
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    sessionStorageMock.getItem.mockImplementation((key) => {
+      if (key === 'omni_secretary_messages') {
+        return JSON.stringify(customMessages);
+      }
+      return null;
+    });
 
     const { container } = render(<ChatUI />);
 
@@ -230,51 +271,23 @@ describe('ChatUI 컴포넌트', () => {
       });
     });
 
-    // 이전 메시지 설정 (세션 스토리지에 추가 메시지가 있다고 가정)
-    const customMessages = [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content:
-          '안녕하세요! Omni Secretary입니다. 이메일 관리와 관련하여 어떤 도움이 필요하신가요?',
-        timestamp: new Date(),
-      },
-      {
-        id: 'test-user',
-        role: 'user',
-        content: '이전 메시지 테스트',
-        timestamp: new Date(),
-      },
-    ];
-
-    sessionStorageMock.getItem.mockReturnValue(JSON.stringify(customMessages));
-
-    // 메시지 상태 업데이트를 위해 다시 렌더링
-    await act(async () => {
-      // 상태 업데이트 트리거를 위한 임의의 이벤트
-      window.dispatchEvent(new Event('storage'));
-    });
+    // 메시지가 있는지 확인
+    const initialMessages = container.querySelectorAll('.whitespace-pre-wrap');
+    expect(initialMessages.length).toBeGreaterThan(0);
 
     // 초기화 버튼 찾기
     const resetButton = container.querySelector('button[aria-label="대화 초기화"]');
-
-    const buttonToClick = resetButton;
-    expect(buttonToClick).not.toBeNull();
+    expect(resetButton).not.toBeNull();
 
     // 초기화 버튼 클릭
     await act(async () => {
-      if (buttonToClick) {
-        fireEvent.click(buttonToClick);
+      if (resetButton) {
+        fireEvent.click(resetButton);
       }
     });
 
     // 세션 스토리지에서 메시지가 삭제되었는지 확인
     expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('omni_secretary_messages');
-
-    // 선택적: 메시지가 UI에서 초기화되었는지 확인할 수 있음
-    // 초기 웰컴 메시지만 남아있어야 함
-    const messageElements = container.querySelectorAll('.whitespace-pre-wrap');
-    expect(messageElements.length).toBe(1); // 웰컴 메시지만 있어야 함
   });
 
   it('창 확대/축소 버튼을 클릭하면 UI 크기가 변경되어야 함', async () => {

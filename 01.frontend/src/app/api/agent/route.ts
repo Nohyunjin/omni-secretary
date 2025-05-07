@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { text, api_key, stream = true, messageHistory = [] } = body;
+    const { text, api_key, stream = true, messageHistory = [], systemPrompt = null } = body;
 
     if (!text) {
       return NextResponse.json({ error: '텍스트가 제공되지 않았습니다.' }, { status: 400 });
@@ -18,6 +18,15 @@ export async function POST(request: Request) {
     const endpointPath = stream ? API_PATHS.agent_stream : API_PATHS.agent;
     const apiUrl = getApiUrl(endpointPath);
 
+    // 시스템 프롬프트가 있으면 메시지 기록 앞에 추가
+    const fullMessageHistory = [...messageHistory];
+    if (systemPrompt) {
+      fullMessageHistory.unshift({
+        role: 'system',
+        content: systemPrompt,
+      });
+    }
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -28,7 +37,7 @@ export async function POST(request: Request) {
         text,
         api_key,
         stream,
-        messageHistory,
+        messageHistory: fullMessageHistory,
       }),
     });
 
