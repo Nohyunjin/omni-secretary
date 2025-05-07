@@ -14,14 +14,16 @@
 
 ```bash
 cd 01.frontend
-npm install
+pnpm install
 ```
 
 ### 2. 백엔드
 
 ```bash
 cd 02.backend
-pip install -r requirements.txt
+uv venv
+source .venv/bin/activate  # Windows에서는: .venv\Scripts\activate
+uv pip install -r requirements.txt
 ```
 
 ### 3. MCP 서버
@@ -33,41 +35,20 @@ npm install
 
 ## 실행 방법
 
-모든 서비스를 한 번에 실행하려면:
-
-### Windows:
-
-```
-run-all.bat
-```
-
-### Linux/Mac:
-
-```
-./run-all.sh
-```
-
 ### 개별 실행:
 
 1. **프론트엔드**:
 
 ```bash
 cd 01.frontend
-npm start
+pnpm start
 ```
 
 2. **백엔드**:
 
 ```bash
 cd 02.backend
-python run.py
-```
-
-3. **Gmail MCP 서버**:
-
-```bash
-cd 03.mcp-server/gmail-mcp
-npm run start:http
+uv run run.py
 ```
 
 ## Gmail 인증 설정
