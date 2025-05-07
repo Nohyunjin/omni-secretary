@@ -41,6 +41,7 @@ npm install
 
 ```bash
 cd 01.frontend
+pnpm run build
 pnpm start
 ```
 
