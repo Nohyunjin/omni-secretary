@@ -18,12 +18,15 @@ jobs:
         with:
           node-version: '18'
 
+      - name: Install pnpm
+        run: npm install -g pnpm
+
       - name: Install dependencies
         run: |
           cd 01.frontend
-          npm ci
+          pnpm install --no-frozen-lockfile
 
       - name: Run tests
         run: |
           cd 01.frontend
-          npm test -- --watchAll=false
+          pnpm test -- --run

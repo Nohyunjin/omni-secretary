@@ -11,6 +11,15 @@ type Message = {
   timestamp: Date;
 };
 
+// 이메일 카테고리 상태 (UI 표시용)
+type EmailStats = {
+  important: number;
+  subscription: number;
+  event: number;
+  promotion: number;
+  junk: number;
+};
+
 // 예시 시작 메시지
 const initialMessages: Message[] = [
   {
@@ -29,6 +38,16 @@ const suggestedPrompts = [
   '스팸 메일을 찾아줘',
 ];
 
+// 자동 이메일 스캔 프롬프트
+const AUTO_SCAN_PROMPT = `오늘 받은 이메일만 스캔하고 다음 카테고리로 분류해서 요약해줘:
+- 중요 메일 (⭐): 긴급한 회의, 중요한 공지, 개인적으로 중요한 메일
+- 구독 메일 (📧): 뉴스레터, 정기 구독 서비스 메일
+- 이벤트 메일 (🎉): 초대장, 행사 알림, 기념일 관련 메일
+- 프로모션 메일 (🛍️): 마케팅, 할인, 상품 광고 메일
+- 스팸/정크 메일 (🗑️): 원치 않는 메일, 악성 메일
+
+각 카테고리별 개수와 오늘 온 중요한 이메일 몇 개만 알려줘.`;
+
 // 세션 스토리지 키
 const STORAGE_KEY = 'omni_secretary_messages';
 
@@ -39,6 +58,8 @@ export default function ChatUI() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [apiKey, setApiKey] = useState<string>('');
+  const [emailStats, setEmailStats] = useState<EmailStats | null>(null);
+  const [autoScanComplete, setAutoScanComplete] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -46,18 +67,56 @@ export default function ChatUI() {
   useEffect(() => {
     const handleApiSuccess = (event: CustomEvent) => {
       setIsActive(true);
-      setApiKey(event.detail?.apiKey || '');
+      const providedApiKey = event.detail?.apiKey || '';
+      setApiKey(providedApiKey);
+
+      // API 키가 입력되면 자동으로 이메일 스캔 요청 시작 (모달에서 확인 버튼 클릭 시에만)
+      if (providedApiKey) {
+        // 메시지 없이 로딩 상태만 활성화
+        setMessages([]);
+        setIsProcessing(true);
+
+        setTimeout(() => {
+          autoScanEmails(providedApiKey);
+        }, 500); // 약간의 지연을 두어 사용자 경험 향상
+      }
     };
 
     // 체험 모드 이벤트도 감지
     const handleDemoStart = () => {
       setIsActive(true);
+
+      // 메시지 없이 로딩 상태만 활성화
+      setMessages([]);
+      setIsProcessing(true);
+
+      // 데모 모드에서는 가상의 자동 스캔 시작
+      setTimeout(() => {
+        simulateDemoScan();
+      }, 500);
     };
 
     // 로컬 스토리지에서 API 키 복원
     const savedKey = localStorage.getItem('api_key');
     if (savedKey) {
       setApiKey(savedKey);
+
+      // 자동 스캔을 이미 완료했는지 확인
+      const scanComplete = sessionStorage.getItem('auto_scan_complete');
+      if (scanComplete === 'true') {
+        setAutoScanComplete(true);
+
+        // 이전 이메일 통계 복원
+        const savedStats = sessionStorage.getItem('email_stats');
+        if (savedStats) {
+          try {
+            setEmailStats(JSON.parse(savedStats));
+          } catch (e) {
+            console.error('저장된 이메일 통계를 불러오는데 실패했습니다.', e);
+          }
+        }
+      }
+      // 새로고침 시에는 자동 스캔을 실행하지 않음 (이 부분에 있던 autoScanEmails 호출 제거)
     }
 
     // 세션 스토리지에서 메시지 기록 복원
@@ -85,12 +144,234 @@ export default function ChatUI() {
     };
   }, []);
 
+  // 자동 이메일 스캔 실행
+  const autoScanEmails = async (apiKeyValue: string) => {
+    if (autoScanComplete) return;
+
+    // 이미 isProcessing이 true로 설정되어 있다고 가정
+
+    // 자동 스캔용 시스템 메시지 (UI에 표시하지 않음)
+    const scanMessage: Message = {
+      id: 'auto-scan-' + Date.now().toString(),
+      role: 'user',
+      content: AUTO_SCAN_PROMPT,
+      timestamp: new Date(),
+    };
+
+    try {
+      // 이전 메시지 컨텍스트 준비
+      const messageHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+
+      // AI 응답 요청
+      const response = await fetch('/api/agent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: AUTO_SCAN_PROMPT,
+          api_key: apiKeyValue,
+          stream: true,
+          messageHistory,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('API 응답 오류');
+      }
+
+      // 스트리밍 응답 처리
+      if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('응답 본문을 읽을 수 없습니다.');
+
+        let fullContent = '';
+        let hasCreatedMessage = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // 디코딩 및 파싱
+          const text = new TextDecoder().decode(value);
+          const lines = text.split('\n');
+
+          let content = '';
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              try {
+                const data = JSON.parse(line.substring(5));
+                if (data.content) {
+                  content += data.content;
+                  fullContent += data.content;
+                }
+              } catch (e) {
+                // 파싱 오류 무시
+              }
+            }
+          }
+
+          if (content) {
+            // 첫 번째 응답에서 새 메시지 생성
+            if (!hasCreatedMessage) {
+              const newMessage: Message = {
+                id: 'scan-result-' + Date.now().toString(),
+                role: 'assistant',
+                content: '📬 이메일 스캔 결과:\n\n' + fullContent,
+                timestamp: new Date(),
+              };
+              setMessages([newMessage]);
+              hasCreatedMessage = true;
+            } else {
+              // 이후 응답에서 메시지 업데이트
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id.startsWith('scan-result-')
+                    ? { ...msg, content: '📬 이메일 스캔 결과:\n\n' + fullContent }
+                    : msg
+                )
+              );
+            }
+          }
+        }
+
+        // 이메일 통계 추출 (응답에서 대략적인 숫자 추출)
+        const stats = extractEmailStats(fullContent);
+        setEmailStats(stats);
+        sessionStorage.setItem('email_stats', JSON.stringify(stats));
+      } else {
+        // 일반 JSON 응답 처리 (필요시)
+        const data = await response.json();
+        const resultMessage: Message = {
+          id: 'scan-result-' + Date.now().toString(),
+          role: 'assistant',
+          content: '📬 이메일 스캔 결과:\n\n' + (data.content || '스캔 결과를 받지 못했습니다.'),
+          timestamp: new Date(),
+        };
+        setMessages([resultMessage]);
+      }
+
+      // 자동 스캔 완료 표시
+      setAutoScanComplete(true);
+      sessionStorage.setItem('auto_scan_complete', 'true');
+    } catch (error) {
+      console.error('자동 이메일 스캔 오류:', error);
+
+      // 오류 메시지 생성
+      const errorMessage: Message = {
+        id: 'scan-error-' + Date.now().toString(),
+        role: 'assistant',
+        content: '죄송합니다, 이메일 스캔 중 오류가 발생했습니다.',
+        timestamp: new Date(),
+      };
+      setMessages([errorMessage]);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 데모 스캔 시뮬레이션
+  const simulateDemoScan = () => {
+    if (autoScanComplete) return;
+
+    // 이미 isProcessing이 true로 설정되어 있다고 가정
+
+    // 데모 응답 시뮬레이션
+    setTimeout(() => {
+      // 현재 날짜를 표시
+      const today = new Date().toLocaleDateString('ko-KR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      const demoResponse = `📬 오늘(${today}) 받은 이메일 스캔 결과:
+
+⭐ 중요 메일: 3개
+- "[긴급] 프로젝트 미팅 일정 변경" (manager@company.com)
+- "계약서 검토 요청" (partner@business.org)
+- "인터뷰 확정 안내" (hr@recruit.co.kr)
+
+📧 구독 메일: 5개
+- "오늘의 뉴스레터" (daily@newsletter.com)
+- "새로운 기술 업데이트" (tech@updates.dev)
+
+🎉 이벤트 메일: 2개
+- "온라인 컨퍼런스 시작 1시간 전 알림" (events@conf.com)
+- "할인 프로모션 마지막 날" (sale@shop.com)
+
+🛍️ 프로모션 메일: 4개
+- "오늘만 특가! 50% 할인" (marketing@store.com)
+- "점심 배달 쿠폰" (food@delivery.app)
+
+🗑️ 스팸/정크 메일: 3개
+
+오늘 총 17개의 이메일이 도착했으며, 이 중 8개는 아직 읽지 않았습니다.
+특히 "계약서 검토 요청"은 오늘 오후 3시까지 회신이 필요한 중요 메일입니다.`;
+
+      // 메시지 생성
+      const resultMessage: Message = {
+        id: 'scan-result-' + Date.now().toString(),
+        role: 'assistant',
+        content: demoResponse,
+        timestamp: new Date(),
+      };
+      setMessages([resultMessage]);
+
+      // 이메일 통계 설정
+      const demoStats: EmailStats = {
+        important: 3,
+        subscription: 5,
+        event: 2,
+        promotion: 4,
+        junk: 3,
+      };
+
+      setEmailStats(demoStats);
+      sessionStorage.setItem('email_stats', JSON.stringify(demoStats));
+
+      // 자동 스캔 완료 표시
+      setAutoScanComplete(true);
+      sessionStorage.setItem('auto_scan_complete', 'true');
+      setIsProcessing(false);
+    }, 2000);
+  };
+
+  // 이메일 통계 추출 함수
+  const extractEmailStats = (content: string): EmailStats => {
+    const stats: EmailStats = {
+      important: 0,
+      subscription: 0,
+      event: 0,
+      promotion: 0,
+      junk: 0,
+    };
+
+    // 마크다운 강조 표시와 함께 숫자를 추출하는 정규식 개선
+    const importantMatch = content.match(/중요[^0-9]*(\**)(\d+)(\**)/i);
+    const subscriptionMatch = content.match(/구독[^0-9]*(\**)(\d+)(\**)/i);
+    const eventMatch = content.match(/이벤트[^0-9]*(\**)(\d+)(\**)/i);
+    const promotionMatch = content.match(/프로모션[^0-9]*(\**)(\d+)(\**)/i);
+    // 스팸 또는 정크라는 단어 뒤의 숫자 추출
+    const junkMatch = content.match(/(스팸|정크)[^0-9]*(\**)(\d+)(\**)/i);
+
+    // 그룹 인덱스 조정하여 항상 숫자 부분만 추출
+    if (importantMatch) stats.important = parseInt(importantMatch[2]);
+    if (subscriptionMatch) stats.subscription = parseInt(subscriptionMatch[2]);
+    if (eventMatch) stats.event = parseInt(eventMatch[2]);
+    if (promotionMatch) stats.promotion = parseInt(promotionMatch[2]);
+    // 스팸/정크 메일 숫자 추출
+    if (junkMatch) stats.junk = parseInt(junkMatch[3]);
+
+    return stats;
+  };
+
   // 메시지가 추가될 때마다 스크롤 맨 아래로 이동 및 세션 스토리지에 저장
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
-    // 초기 메시지가 아닌 경우에만 세션 스토리지에 저장
-    if (messages.length > initialMessages.length || messages[0].id !== initialMessages[0].id) {
+    // 메시지가 있을 때만 세션 스토리지에 저장
+    if (messages.length > 0) {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     }
   }, [messages]);
@@ -106,8 +387,21 @@ export default function ChatUI() {
 
   // 대화 기록 초기화
   const resetConversation = () => {
-    setMessages(initialMessages);
+    setMessages([]);
     sessionStorage.removeItem(STORAGE_KEY);
+    setAutoScanComplete(false);
+    sessionStorage.removeItem('auto_scan_complete');
+
+    // 대화 초기화 후 새로운 스캔 시작
+    if (apiKey) {
+      // 로딩 상태만 활성화
+      setIsProcessing(true);
+
+      // 새로운 스캔 시작
+      setTimeout(() => {
+        autoScanEmails(apiKey);
+      }, 500);
+    }
   };
 
   // 메시지 전송 처리
@@ -270,7 +564,27 @@ export default function ChatUI() {
       {/* 헤더 */}
       <header className="border-b p-3 flex items-center bg-primary text-white shrink-0">
         <h1 className="text-lg font-bold">Omni Secretary</h1>
+
+        {/* 이메일 스캔 상태 표시 */}
+        {isProcessing && (
+          <div className="ml-2 flex items-center text-xs bg-primary-600 px-2 py-0.5 rounded-full">
+            <div className="animate-spin mr-1 h-3 w-3 border-2 border-white border-t-transparent rounded-full"></div>
+            메일 분석 중...
+          </div>
+        )}
+
         <div className="ml-auto flex items-center gap-1">
+          {/* 이메일 통계 표시 */}
+          {emailStats && autoScanComplete && (
+            <div className="mr-2 text-xs flex items-center space-x-1.5">
+              <span title="중요 메일">⭐ {emailStats.important}</span>
+              <span title="구독 메일">📧 {emailStats.subscription}</span>
+              <span title="이벤트 메일">🎉 {emailStats.event}</span>
+              <span title="프로모션 메일">🛍️ {emailStats.promotion}</span>
+              <span title="스팸/정크 메일">🗑️ {emailStats.junk}</span>
+            </div>
+          )}
+
           <button
             className="p-1.5 rounded-md hover:bg-primary-600 transition-colors"
             onClick={resetConversation}
