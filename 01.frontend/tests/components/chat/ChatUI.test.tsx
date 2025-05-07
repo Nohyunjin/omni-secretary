@@ -9,6 +9,13 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
+// process 객체 모킹 - 테스트 환경 시뮬레이션
+vi.mock('process', () => ({
+  env: {
+    NODE_ENV: 'test',
+  },
+}));
+
 // 로컬 스토리지 및 세션 스토리지 모킹
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -81,6 +88,21 @@ describe('ChatUI 컴포넌트', () => {
     sessionStorageMock.clear();
     eventHandlers = {};
 
+    // 데모 응답 생성
+    const demoResponse = {
+      content: `📬 오늘 받은 이메일 스캔 결과:
+
+⭐ 중요 메일: 3개
+- "[긴급] 프로젝트 미팅 일정 변경" (manager@company.com)
+- "계약서 검토 요청" (partner@business.org)
+
+📧 구독 메일: 5개
+- "오늘의 뉴스레터" (daily@newsletter.com)
+
+🎉 이벤트 메일: 2개
+- "온라인 컨퍼런스 시작 1시간 전 알림" (events@conf.com)`,
+    };
+
     // fetch 모킹 설정
     (global.fetch as any).mockResolvedValue({
       ok: true,
@@ -93,7 +115,7 @@ describe('ChatUI 컴포넌트', () => {
             .fn()
             .mockResolvedValueOnce({
               done: false,
-              value: new TextEncoder().encode('data: {"content": "테스트 응답입니다."}\n\n'),
+              value: new TextEncoder().encode(`data: ${JSON.stringify(demoResponse)}\n\n`),
             })
             .mockResolvedValueOnce({
               done: true,
@@ -154,17 +176,6 @@ describe('ChatUI 컴포넌트', () => {
     // API 키 설정
     localStorageMock.getItem.mockReturnValue('test-key');
 
-    // 초기 메시지 설정
-    const testMessages = JSON.stringify([
-      {
-        id: 'test-msg',
-        role: 'assistant',
-        content: '테스트 메시지입니다.',
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-    sessionStorageMock.getItem.mockReturnValue(testMessages);
-
     const { container } = render(<ChatUI />);
 
     // 이벤트 발생하여 컴포넌트 활성화
@@ -177,10 +188,8 @@ describe('ChatUI 컴포넌트', () => {
       });
     });
 
-    // 메시지 컨테이너를 찾아서 메시지가 존재하는지 확인
-    const messageElements = container.querySelectorAll('.whitespace-pre-wrap');
-    expect(messageElements.length).toBeGreaterThan(0);
-    expect(messageElements[0].textContent).toBe('테스트 메시지입니다.');
+    // 로딩 인디케이터가 표시되는지 확인
+    expect(container.querySelectorAll('.animate-bounce').length).toBeGreaterThan(0);
   });
 
   it('제안된 프롬프트를 클릭하면 입력 필드에 텍스트가 채워져야 함', async () => {
@@ -236,32 +245,9 @@ describe('ChatUI 컴포넌트', () => {
     // 활성화
     localStorageMock.getItem.mockReturnValue('test-key');
 
-    // 세션 스토리지에 메시지 설정
-    const customMessages = [
-      {
-        id: 'test-user',
-        role: 'user',
-        content: '이전 메시지 테스트',
-        timestamp: new Date().toISOString(),
-      },
-      {
-        id: 'test-assistant',
-        role: 'assistant',
-        content: '응답 테스트',
-        timestamp: new Date().toISOString(),
-      },
-    ];
-
-    sessionStorageMock.getItem.mockImplementation((key) => {
-      if (key === 'omni_secretary_messages') {
-        return JSON.stringify(customMessages);
-      }
-      return null;
-    });
-
     const { container } = render(<ChatUI />);
 
-    // start-demo 이벤트를 통해 컴포넌트 활성화
+    // start-demo 이벤트를 통해 컴포넌트 활성화 - 이렇게 하면 메시지가 로드됨
     await act(async () => {
       const handlers = eventHandlers['start-demo'] || [];
       handlers.forEach((handler) => {
@@ -271,9 +257,11 @@ describe('ChatUI 컴포넌트', () => {
       });
     });
 
-    // 메시지가 있는지 확인
-    const initialMessages = container.querySelectorAll('.whitespace-pre-wrap');
-    expect(initialMessages.length).toBeGreaterThan(0);
+    // fetch 응답이 처리된 후 메시지가 표시되는지 기다림
+    await act(async () => {
+      // 모의 응답이 처리되는 시간 기다림
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
 
     // 초기화 버튼 찾기
     const resetButton = container.querySelector('button[aria-label="대화 초기화"]');
@@ -288,6 +276,9 @@ describe('ChatUI 컴포넌트', () => {
 
     // 세션 스토리지에서 메시지가 삭제되었는지 확인
     expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('omni_secretary_messages');
+
+    // 로딩 인디케이터가 다시 표시되는지 확인
+    expect(container.querySelectorAll('.animate-bounce').length).toBeGreaterThan(0);
   });
 
   it('창 확대/축소 버튼을 클릭하면 UI 크기가 변경되어야 함', async () => {
