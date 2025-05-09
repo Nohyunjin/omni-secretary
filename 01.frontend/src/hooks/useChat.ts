@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchAgentResponse, processStreamResponse } from '../services/api';
 import { Message, STORAGE_KEY } from '../types/chat';
 import { saveMessages } from '../utils/storage';
@@ -18,6 +18,13 @@ type ChatHookReturn = {
 export const useChat = ({ initialMessages, apiKey }: ChatHookProps): ChatHookReturn => {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // 메시지가 변경될 때마다 저장 (클라이언트 사이드에서만)
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveMessages(messages);
+    }
+  }, [messages]);
 
   // 메시지 전송 및 응답 처리
   const sendMessage = async (text: string) => {
@@ -88,18 +95,10 @@ export const useChat = ({ initialMessages, apiKey }: ChatHookProps): ChatHookRet
   const resetConversation = () => {
     setMessages([]);
     // 세션 스토리지에서 메시지 삭제 (테스트 호환성 유지)
-    sessionStorage.removeItem(STORAGE_KEY);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
   };
-
-  // 메시지 저장
-  const saveConversation = () => {
-    saveMessages(messages);
-  };
-
-  // 메시지가 변경될 때마다 저장
-  if (messages.length > 0) {
-    saveConversation();
-  }
 
   return {
     messages,

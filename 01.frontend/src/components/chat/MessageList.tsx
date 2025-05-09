@@ -26,7 +26,9 @@ export const MessageList = ({ messages, isProcessing }: MessageListProps) => {
               message.role === 'user' ? 'bg-primary text-white' : 'bg-slate-200 dark:bg-slate-700'
             }`}
           >
-            <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+            <p className="whitespace-pre-wrap text-sm break-words overflow-hidden">
+              {message.content}
+            </p>
             <div
               className={`text-xs mt-1 ${
                 message.role === 'user' ? 'text-primary-100' : 'text-slate-500 dark:text-slate-400'

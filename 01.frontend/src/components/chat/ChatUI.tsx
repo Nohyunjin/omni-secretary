@@ -10,15 +10,8 @@ import { MessageInput } from './MessageInput';
 import { MessageList } from './MessageList';
 import { SuggestedPrompts } from './SuggestedPrompts';
 
-// 예시 시작 메시지
-const initialMessages: Message[] = [
-  {
-    id: 'welcome',
-    role: 'assistant',
-    content: '안녕하세요! Omni Secretary입니다. 이메일 관리와 관련하여 어떤 도움이 필요하신가요?',
-    timestamp: new Date(),
-  },
-];
+// 빈 초기 메시지 (안내 인사 없이 바로 스캔 시작)
+const initialMessages: Message[] = [];
 
 export default function ChatUI() {
   const [isActive, setIsActive] = useState(false);
@@ -107,6 +100,8 @@ export default function ChatUI() {
     // 체험 모드 이벤트도 감지
     const handleDemoStart = () => {
       setIsActive(true);
+      // 데모 모드에서는 메시지 초기화 후 가상의 자동 스캔 시작
+      resetConversation();
       simulateDemoScan();
     };
 
@@ -123,7 +118,7 @@ export default function ChatUI() {
       window.removeEventListener('api-key-success', handleApiSuccess as EventListener);
       window.removeEventListener('start-demo', handleDemoStart);
     };
-  }, [handleStartAutoScan, simulateDemoScan]);
+  }, [handleStartAutoScan, resetConversation, simulateDemoScan]);
 
   // 메시지 전송 처리
   const handleSendMessage = async () => {

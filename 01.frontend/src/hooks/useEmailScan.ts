@@ -109,6 +109,12 @@ export const useEmailScan = ({ apiKey, setMessages }: EmailScanHookProps): Email
     }
   };
 
+  // 스캔 상태 초기화
+  const resetScanStatus = () => {
+    setAutoScanComplete(false);
+    saveAutoScanStatus(false);
+  };
+
   // 데모 스캔 시뮬레이션
   const simulateDemoScan = () => {
     if (autoScanComplete || isProcessing) return;
@@ -175,12 +181,6 @@ export const useEmailScan = ({ apiKey, setMessages }: EmailScanHookProps): Email
       saveAutoScanStatus(true);
       setIsProcessing(false);
     }, 2000);
-  };
-
-  // 스캔 상태 초기화
-  const resetScanStatus = () => {
-    setAutoScanComplete(false);
-    sessionStorage.removeItem('auto_scan_complete');
   };
 
   return {
